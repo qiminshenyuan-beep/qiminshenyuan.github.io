@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ウクライナ戦争：エネルギー収支シミュレーション</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f4f6fa}
+body{margin:0;padding:20px;max-width:1400px;margin-inline:auto}
+h1{font-size:clamp(1.35rem,2.5vw,2rem);margin:0 0 6px}
+.sub{color:#536078;margin:0 0 18px}
+.layout{display:grid;grid-template-columns:320px 1fr;gap:18px}
+.panel{background:white;border:1px solid #dce2ec;border-radius:14px;padding:16px;box-shadow:0 2px 8px #1720330a}
+h2{font-size:1.05rem;margin:0 0 12px}
+label{display:block;font-size:.9rem;font-weight:650;margin:13px 0 5px}
+input[type=number]{width:100%;box-sizing:border-box;padding:9px;border:1px solid #c7cfdd;border-radius:8px;font-size:1rem}
+small,.note{font-size:.82rem;color:#5a6579;line-height:1.55}
+button{border:0;border-radius:9px;padding:10px 13px;font-weight:700;cursor:pointer}
+.primary{background:#1d4ed8;color:white}.secondary{background:#e8edf6;color:#1c2a44}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
+.status{background:#edf4ff;border-radius:10px;padding:12px;margin:12px 0;font-size:.95rem}
+.status strong{font-size:1.25rem}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.kpi{background:#f7f9fc;border:1px solid #e3e8f0;border-radius:10px;padding:10px}
+.kpi span{display:block;color:#58657b;font-size:.8rem}.kpi strong{font-size:1.15rem}
+.chartbox{height:330px;position:relative;margin:8px 0 18px}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{padding:7px 8px;border-bottom:1px solid #e4e8ef;text-align:right;white-space:nowrap}
+th{background:#f5f7fb}th:first-child,td:first-child{text-align:left}
+.tablewrap{overflow:auto;max-height:280px}
+.warn{color:#a33b20;font-weight:650;min-height:1.3em}
+footer{margin-top:14px}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.chartbox{height:280px}}
+</style>
+</head>
+<body>
+<h1>ウクライナ戦争：エネルギー収支シミュレーション</h1>
+
+<div class="layout">
+<section class="panel">
+<h2>初期パラメータ</h2>
+<p class="note">単位はすべて「エネルギー単位／月」（教材用の相対単位）。実測統計そのものではありません。</p>
+<label for="domestic">① 国内供給エネルギー</label><input id="domestic" type="number" min="0" max="200" step="1" value="48">
+<label for="foreign">② 海外からの供給エネルギー</label><input id="foreign" type="number" min="0" max="200" step="1" value="19">
+<label for="civil">③ 市民生活に使用するエネルギー</label><input id="civil" type="number" min="0" max="200" step="1" value="65">
+<label for="military">④ ウクライナの軍事活動に使用するエネルギー</label><input id="military" type="number" min="0" max="200" step="1" value="2">
+<label for="russiaMilitary">⑤ ロシアの軍事活動エネルギー</label><input id="russiaMilitary" type="number" min="0" max="200" step="1" value="5">
+<p class="note">再生中もパラメータを変更できます。⑤はロシア側の参考値で、ウクライナのエネルギー収支計算・グラフには含めません。</p>
+<div class="warn" id="validation"></div>
+<div class="controls">
+<button class="primary" id="start">最初から再生</button>
+<button class="secondary" id="pause">一時停止</button>
+<button class="secondary" id="step">1か月進める</button>
+<button class="secondary" id="reset">初期化</button>
+</div>
+<div class="status">経過：<strong id="month">0 / 48</strong><br>現在の収支：<strong id="balance">—</strong><br><small>収支＝①＋②－③－④</small></div>
+<p class="note">供給を上回る需要は赤字収支として表示します。パラメータ変更は次に進む月から反映されます。</p>
+</section>
+<section>
+<div class="panel">
+<div class="kpis">
+<div class="kpi"><span>① 国内供給</span><strong id="k1">—</strong></div>
+<div class="kpi"><span>② 海外供給</span><strong id="k2">—</strong></div>
+<div class="kpi"><span>③ 市民生活</span><strong id="k3">—</strong></div>
+<div class="kpi"><span>④ 軍事活動</span><strong id="k4">—</strong></div>
+</div>
+<h2>エネルギー供給・消費・収支・残量の推移</h2>
+<p class="note">「エネルギー残量」は、各月の収支を前月までの累計に加えた値です。初期残量は0として計算します。</p>
+<div class="chartbox"><canvas id="energyChart"></canvas></div>
+</div>
+<div class="panel" style="margin-top:18px">
+<h2>月別データ</h2>
+<div class="tablewrap"><table><thead><tr><th>月</th><th>①国内</th><th>②海外</th><th>③市民</th><th>④軍事</th><th>月ごとの収支</th><th>累計エネルギー残量</th></tr></thead><tbody id="rows"></tbody></table></div>
+</div>
+</section>
+</div>
+<footer class="note">授業での考察用に、供給・需要の関係を単純化したシミュレーションです。実際の戦争継続能力は、燃料の種類、輸送・備蓄、送電網の損傷、資金、装備・人員、国外支援などにも左右され、エネルギー収支だけでは説明できません。</footer>
+<script>
+const $=id=>document.getElementById(id);
+let month=0,timer=null;
+let series={domestic:[],foreign:[],civil:[],military:[],balance:[],remaining:[]};
+let remaining=0;
+const labels=Array.from({length:48},(_,i)=>`${Math.floor(i/12)+1}年目 ${i%12+1}月`);
+const common={responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},scales:{x:{ticks:{maxTicksLimit:12,maxRotation:0}},y:{beginAtZero:false,title:{display:true,text:'エネルギー単位'}}}};
+const energyChart=new Chart($('energyChart'),{type:'line',data:{labels:[],datasets:[
+{label:'① 国内供給',data:[],borderColor:'#2563eb',backgroundColor:'rgba(37,99,235,0.10)',fill:false,tension:0.15,pointRadius:2},
+{label:'② 海外供給',data:[],borderColor:'#0d9488',backgroundColor:'rgba(13,148,136,0.10)',fill:false,tension:0.15,pointRadius:2},
+{label:'③ 市民生活',data:[],borderColor:'#d97706',backgroundColor:'rgba(217,119,6,0.10)',fill:false,tension:0.15,pointRadius:2},
+{label:'④ 軍事活動',data:[],borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,0.10)',fill:false,tension:0.15,pointRadius:2},
+{label:'月ごとのエネルギー収支',data:[],borderColor:'#64748b',backgroundColor:'rgba(100,116,139,0.10)',fill:false,tension:0.15,pointRadius:2},
+{label:'累計エネルギー残量',data:[],borderColor:'#dc2626',backgroundColor:'rgba(220,38,38,0.16)',fill:true,tension:0.15,pointRadius:2,borderWidth:3}
+]},options:{...common,scales:{...common.scales,y:{beginAtZero:false,title:{display:true,text:'エネルギー単位（相対値）'}}}}});
+function val(id){return Number($(id).value)}
+function validateInitial(){
+ const d=val('domestic'),f=val('foreign'),c=val('civil'),m=val('military'),r=val('russiaMilitary');
+ const ok=[d,f,c,m,r].every(Number.isFinite)&&[d,f,c,m,r].every(x=>x>=0);
+ if(!ok){
+   $('validation').textContent='各パラメータは0以上の数値にしてください。';
+   return false;
+ }
+ updateWarnings();
+ return true;
+}
+function updateWarnings(){
+ const d=val('domestic'),f=val('foreign'),c=val('civil'),m=val('military');
+ const messages=[];
+ if(c+m>d+f) messages.push('消費量が供給量を上回っています。');
+ if(remaining<0) messages.push('エネルギー不足です。');
+ if(m<val('russiaMilitary')) messages.push('ロシアが攻勢です');
+ $('validation').textContent=messages.join(' ');
+}
+function stop(){if(timer){clearInterval(timer);timer=null;}}
+function resetData(){
+ stop();month=0;remaining=0;
+ series={domestic:[],foreign:[],civil:[],military:[],balance:[],remaining:[]};
+ energyChart.data.labels=[];
+ energyChart.data.datasets.forEach(ds=>ds.data=[]);
+ energyChart.update();
+ $('rows').innerHTML='';$('month').textContent='0 / 48';$('balance').textContent='—';
+ ['k1','k2','k3','k4'].forEach(id=>$(id).textContent='—');
+}
+function tick(){
+ if(month>=48){stop();return;}
+ const d=val('domestic'),f=val('foreign'),c=val('civil'),m=val('military'),b=d+f-c-m;
+ if(!validateInitial())return;
+ remaining+=b;
+ updateWarnings();
+ const vals=[d,f,c,m,b,remaining];
+ ['domestic','foreign','civil','military','balance','remaining'].forEach((k,j)=>series[k].push(vals[j]));
+ const label=labels[month];
+ energyChart.data.labels.push(label);
+ energyChart.data.datasets.forEach((ds,j)=>ds.data.push(vals[j]));
+ energyChart.update();
+ $('rows').insertAdjacentHTML('beforeend',`<tr><td>${label}</td><td>${d}</td><td>${f}</td><td>${c}</td><td>${m}</td><td>${b>0?'+' : ''}${b}</td><td>${remaining>0?'+' : ''}${remaining}</td></tr>`);
+ $('month').textContent=`${month+1} / 48`;
+ $('balance').textContent=(b>0?'+':'')+b;
+ $('balance').style.color=b<0?'#b42318':b>0?'#087443':'#172033';
+ ['k1','k2','k3','k4'].forEach((id,j)=>$(id).textContent=vals[j]);
+ month++;
+ if(month>=48)stop();
+}
+$('start').onclick=()=>{if(!validateInitial())return;resetData();tick();if(month<48)timer=setInterval(tick,3000);};
+$('pause').onclick=stop;
+$('step').onclick=()=>{if(!validateInitial())return;stop();tick();};
+$('reset').onclick=()=>{resetData();validateInitial();};
+['domestic','foreign','civil','military','russiaMilitary'].forEach(id=>$(id).addEventListener('input',validateInitial));
+validateInitial();
+</script>
+</body>
+</html>
